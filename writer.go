@@ -263,24 +263,16 @@ func (pdfWriter *PdfWriter) writeValue(value *PdfValue) {
 	switch value.Type {
 	case PDF_TYPE_TOKEN:
 		pdfWriter.straightOut(value.Token + " ")
-		break
-
 	case PDF_TYPE_NUMERIC:
 		pdfWriter.straightOut(fmt.Sprintf("%d", value.Int) + " ")
-		break
-
 	case PDF_TYPE_REAL:
 		pdfWriter.straightOut(fmt.Sprintf("%F", value.Real) + " ")
-		break
-
 	case PDF_TYPE_ARRAY:
 		pdfWriter.straightOut("[")
 		for i := 0; i < len(value.Array); i++ {
 			pdfWriter.writeValue(value.Array[i])
 		}
 		pdfWriter.out("]")
-		break
-
 	case PDF_TYPE_DICTIONARY:
 		pdfWriter.straightOut("<<")
 		for k, v := range value.Dictionary {
@@ -288,8 +280,6 @@ func (pdfWriter *PdfWriter) writeValue(value *PdfValue) {
 			pdfWriter.writeValue(v)
 		}
 		pdfWriter.straightOut(">>")
-		break
-
 	case PDF_TYPE_OBJREF:
 		// An indirect object reference.  Fill the object stack if needed.
 		// Check to see if object already exists on the don_obj_stack.
@@ -303,37 +293,26 @@ func (pdfWriter *PdfWriter) writeValue(value *PdfValue) {
 		objId := pdfWriter.don_obj_stack[value.Id].NewId
 		pdfWriter.outObjRef(objId)
 		//pdfWriter.out(fmt.Sprintf("%d 0 R", objId))
-		break
-
 	case PDF_TYPE_STRING:
 		// A string
 		pdfWriter.straightOut("(" + value.String + ")")
-		break
-
 	case PDF_TYPE_STREAM:
 		// A stream.  First, output the stream dictionary, then the stream data itself.
 		pdfWriter.writeValue(value.Value)
 		pdfWriter.out("stream")
 		pdfWriter.out(string(value.Stream.Bytes))
 		pdfWriter.out("endstream")
-		break
-
 	case PDF_TYPE_HEX:
 		pdfWriter.straightOut("<" + value.String + ">")
-		break
-
 	case PDF_TYPE_BOOLEAN:
 		if value.Bool {
 			pdfWriter.straightOut("true ")
 		} else {
 			pdfWriter.straightOut("false ")
 		}
-		break
-
 	case PDF_TYPE_NULL:
 		// The null object
 		pdfWriter.straightOut("null ")
-		break
 	}
 }
 
@@ -405,13 +384,9 @@ func (pdfWriter *PdfWriter) PutFormXobjects(reader *PdfReader) (map[string]*PdfO
 				case -90:
 					tx = -tpl.Box["lly"]
 					ty = tpl.Box["urx"]
-					break
-
 				case -180:
 					tx = tpl.Box["urx"]
 					ty = tpl.Box["ury"]
-					break
-
 				case -270:
 					tx = tpl.Box["ury"]
 					ty = -tpl.Box["llx"]

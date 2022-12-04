@@ -61,14 +61,14 @@ func (this *Importer) init() {
 	this.importedPages = make(map[string]int, 0)
 }
 
-func (this *Importer) SetSourceFile(f string) {
+func (this *Importer) SetSourceFile(f string) error {
 	this.sourceFile = f
 
 	// If reader hasn't been instantiated, do that now
 	if _, ok := this.readers[this.sourceFile]; !ok {
 		reader, err := NewPdfReader(this.sourceFile)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		this.readers[this.sourceFile] = reader
 	}
@@ -77,22 +77,24 @@ func (this *Importer) SetSourceFile(f string) {
 	if _, ok := this.writers[this.sourceFile]; !ok {
 		writer, err := NewPdfWriter("")
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		// Make the next writer start template numbers at this.tplN
 		writer.SetTplIdOffset(this.tplN)
 		this.writers[this.sourceFile] = writer
 	}
+
+	return nil
 }
 
-func (this *Importer) SetSourceStream(rs *io.ReadSeeker) {
+func (this *Importer) SetSourceStream(rs *io.ReadSeeker) error {
 	this.sourceFile = fmt.Sprintf("%v", rs)
 
 	if _, ok := this.readers[this.sourceFile]; !ok {
 		reader, err := NewPdfReaderFromStream(*rs)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		this.readers[this.sourceFile] = reader
 	}
@@ -101,45 +103,35 @@ func (this *Importer) SetSourceStream(rs *io.ReadSeeker) {
 	if _, ok := this.writers[this.sourceFile]; !ok {
 		writer, err := NewPdfWriter("")
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		// Make the next writer start template numbers at this.tplN
 		writer.SetTplIdOffset(this.tplN)
 		this.writers[this.sourceFile] = writer
 	}
+
+	return nil
 }
 
-func (this *Importer) GetNumPages() int {
-	result, err := this.GetReader().getNumPages()
-
-	if err != nil {
-		panic(err)
-	}
-
-	return result
+func (this *Importer) GetNumPages() (int, error) {
+	return this.GetReader().getNumPages()
 }
 
-func (this *Importer) GetPageSizes() map[int]map[string]map[string]float64 {
-	result, err := this.GetReader().getAllPageBoxes(1.0)
-
-	if err != nil {
-		panic(err)
-	}
-
-	return result
+func (this *Importer) GetPageSizes() (map[int]map[string]map[string]float64, error) {
+	return this.GetReader().getAllPageBoxes(1.0)
 }
 
-func (this *Importer) ImportPage(pageno int, box string) int {
+func (this *Importer) ImportPage(pageno int, box string) (int, error) {
 	// If page has already been imported, return existing tplN
 	pageNameNumber := fmt.Sprintf("%s-%04d", this.sourceFile, pageno)
 	if _, ok := this.importedPages[pageNameNumber]; ok {
-		return this.importedPages[pageNameNumber]
+		return this.importedPages[pageNameNumber], nil
 	}
 
 	res, err := this.GetWriter().ImportPage(this.GetReader(), pageno, box)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 
 	// Get current template id
@@ -154,7 +146,7 @@ func (this *Importer) ImportPage(pageno int, box string) int {
 	// Cache imported page tplN
 	this.importedPages[pageNameNumber] = tplN
 
-	return tplN
+	return tplN, nil
 }
 
 func (this *Importer) SetNextObjectID(objId int) {
@@ -162,30 +154,30 @@ func (this *Importer) SetNextObjectID(objId int) {
 }
 
 // Put form xobjects and get back a map of template names (e.g. /GOFPDITPL1) and their object ids (int)
-func (this *Importer) PutFormXobjects() map[string]int {
+func (this *Importer) PutFormXobjects() (map[string]int, error) {
 	res := make(map[string]int, 0)
 	tplNamesIds, err := this.GetWriter().PutFormXobjects(this.GetReader())
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	for tplName, pdfObjId := range tplNamesIds {
 		res[tplName] = pdfObjId.id
 	}
-	return res
+	return res, nil
 }
 
 // Put form xobjects and get back a map of template names (e.g. /GOFPDITPL1) and their object ids (sha1 hash)
-func (this *Importer) PutFormXobjectsUnordered() map[string]string {
+func (this *Importer) PutFormXobjectsUnordered() (map[string]string, error) {
 	this.GetWriter().SetUseHash(true)
 	res := make(map[string]string, 0)
 	tplNamesIds, err := this.GetWriter().PutFormXobjects(this.GetReader())
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	for tplName, pdfObjId := range tplNamesIds {
 		res[tplName] = pdfObjId.hash
 	}
-	return res
+	return res, nil
 }
 
 // Get object ids (int) and their contents (string)

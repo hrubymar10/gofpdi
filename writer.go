@@ -45,26 +45,26 @@ type PdfObject struct {
 	buffer *bytes.Buffer
 }
 
-func (this *PdfWriter) SetTplIdOffset(n int) {
-	this.tpl_id_offset = n
+func (pdfWriter *PdfWriter) SetTplIdOffset(n int) {
+	pdfWriter.tpl_id_offset = n
 }
 
-func (this *PdfWriter) Init() {
-	this.k = 1
-	this.obj_stack = make(map[int]*PdfValue, 0)
-	this.don_obj_stack = make(map[int]*PdfValue, 0)
-	this.tpls = make([]*PdfTemplate, 0)
-	this.written_objs = make(map[*PdfObjectId][]byte, 0)
-	this.written_obj_pos = make(map[*PdfObjectId]map[int]string, 0)
-	this.current_obj = new(PdfObject)
+func (pdfWriter *PdfWriter) Init() {
+	pdfWriter.k = 1
+	pdfWriter.obj_stack = make(map[int]*PdfValue, 0)
+	pdfWriter.don_obj_stack = make(map[int]*PdfValue, 0)
+	pdfWriter.tpls = make([]*PdfTemplate, 0)
+	pdfWriter.written_objs = make(map[*PdfObjectId][]byte, 0)
+	pdfWriter.written_obj_pos = make(map[*PdfObjectId]map[int]string, 0)
+	pdfWriter.current_obj = new(PdfObject)
 }
 
-func (this *PdfWriter) SetUseHash(b bool) {
-	this.use_hash = b
+func (pdfWriter *PdfWriter) SetUseHash(b bool) {
+	pdfWriter.use_hash = b
 }
 
-func (this *PdfWriter) SetNextObjectID(id int) {
-	this.n = id - 1
+func (pdfWriter *PdfWriter) SetNextObjectID(id int) {
+	pdfWriter.n = id - 1
 }
 
 func NewPdfWriter(filename string) (*PdfWriter, error) {
@@ -99,34 +99,34 @@ type PdfTemplate struct {
 	N         int
 }
 
-func (this *PdfWriter) GetImportedObjects() map[*PdfObjectId][]byte {
-	return this.written_objs
+func (pdfWriter *PdfWriter) GetImportedObjects() map[*PdfObjectId][]byte {
+	return pdfWriter.written_objs
 }
 
 // For each object (uniquely identified by a sha1 hash), return the positions
 // of each hash within the object, to be replaced with pdf object ids (integers)
-func (this *PdfWriter) GetImportedObjHashPos() map[*PdfObjectId]map[int]string {
-	return this.written_obj_pos
+func (pdfWriter *PdfWriter) GetImportedObjHashPos() map[*PdfObjectId]map[int]string {
+	return pdfWriter.written_obj_pos
 }
 
-func (this *PdfWriter) ClearImportedObjects() {
-	this.written_objs = make(map[*PdfObjectId][]byte, 0)
+func (pdfWriter *PdfWriter) ClearImportedObjects() {
+	pdfWriter.written_objs = make(map[*PdfObjectId][]byte, 0)
 }
 
 // Create a PdfTemplate object from a page number (e.g. 1) and a boxName (e.g. MediaBox)
-func (this *PdfWriter) ImportPage(reader *PdfReader, pageno int, boxName string) (int, error) {
+func (pdfWriter *PdfWriter) ImportPage(reader *PdfReader, pageno int, boxName string) (int, error) {
 	var err error
 
 	// Set default scale to 1
-	this.k = 1
+	pdfWriter.k = 1
 
 	// Get all page boxes
-	pageBoxes, err := reader.getPageBoxes(1, this.k)
+	pageBoxes, err := reader.getPageBoxes(1, pdfWriter.k)
 	if err != nil {
 		return -1, errors.Wrap(err, "Failed to get page boxes")
 	}
 
-	// If requested box name does not exist for this page, use an alternate box
+	// If requested box name does not exist for pdfWriter page, use an alternate box
 	if _, ok := pageBoxes[boxName]; !ok {
 		if boxName == "/BleedBox" || boxName == "/TrimBox" || boxName == "ArtBox" {
 			boxName = "/CropBox"
@@ -191,157 +191,157 @@ func (this *PdfWriter) ImportPage(reader *PdfReader, pageno int, boxName string)
 		tpl.Rotation = angle * -1
 	}
 
-	this.tpls = append(this.tpls, tpl)
+	pdfWriter.tpls = append(pdfWriter.tpls, tpl)
 
 	// Return last template id
-	return len(this.tpls) - 1, nil
+	return len(pdfWriter.tpls) - 1, nil
 }
 
 // Create a new object and keep track of the offset for the xref table
-func (this *PdfWriter) newObj(objId int, onlyNewObj bool) {
+func (pdfWriter *PdfWriter) newObj(objId int, onlyNewObj bool) {
 	if objId < 0 {
-		this.n++
-		objId = this.n
+		pdfWriter.n++
+		objId = pdfWriter.n
 	}
 
 	if !onlyNewObj {
 		// set current object id integer
-		this.current_obj_id = objId
+		pdfWriter.current_obj_id = objId
 
 		// Create new PdfObject and PdfObjectId
-		this.current_obj = new(PdfObject)
-		this.current_obj.buffer = new(bytes.Buffer)
-		this.current_obj.id = new(PdfObjectId)
-		this.current_obj.id.id = objId
-		this.current_obj.id.hash = this.shaOfInt(objId)
+		pdfWriter.current_obj = new(PdfObject)
+		pdfWriter.current_obj.buffer = new(bytes.Buffer)
+		pdfWriter.current_obj.id = new(PdfObjectId)
+		pdfWriter.current_obj.id.id = objId
+		pdfWriter.current_obj.id.hash = pdfWriter.shaOfInt(objId)
 
-		this.written_obj_pos[this.current_obj.id] = make(map[int]string, 0)
+		pdfWriter.written_obj_pos[pdfWriter.current_obj.id] = make(map[int]string, 0)
 	}
 }
 
-func (this *PdfWriter) endObj() {
-	this.out("endobj")
+func (pdfWriter *PdfWriter) endObj() {
+	pdfWriter.out("endobj")
 
-	this.written_objs[this.current_obj.id] = this.current_obj.buffer.Bytes()
-	this.current_obj_id = -1
+	pdfWriter.written_objs[pdfWriter.current_obj.id] = pdfWriter.current_obj.buffer.Bytes()
+	pdfWriter.current_obj_id = -1
 }
 
-func (this *PdfWriter) shaOfInt(i int) string {
+func (pdfWriter *PdfWriter) shaOfInt(i int) string {
 	hasher := sha1.New()
-	hasher.Write([]byte(fmt.Sprintf("%d-%s", i, this.r.sourceFile)))
+	hasher.Write([]byte(fmt.Sprintf("%d-%s", i, pdfWriter.r.sourceFile)))
 	sha := hex.EncodeToString(hasher.Sum(nil))
 	return sha
 }
 
-func (this *PdfWriter) outObjRef(objId int) {
-	sha := this.shaOfInt(objId)
+func (pdfWriter *PdfWriter) outObjRef(objId int) {
+	sha := pdfWriter.shaOfInt(objId)
 
 	// Keep track of object hash and position - to be replaced with actual object id (integer)
-	this.written_obj_pos[this.current_obj.id][this.current_obj.buffer.Len()] = sha
+	pdfWriter.written_obj_pos[pdfWriter.current_obj.id][pdfWriter.current_obj.buffer.Len()] = sha
 
-	if this.use_hash {
-		this.current_obj.buffer.WriteString(sha)
+	if pdfWriter.use_hash {
+		pdfWriter.current_obj.buffer.WriteString(sha)
 	} else {
-		this.current_obj.buffer.WriteString(fmt.Sprintf("%d", objId))
+		pdfWriter.current_obj.buffer.WriteString(fmt.Sprintf("%d", objId))
 	}
-	this.current_obj.buffer.WriteString(" 0 R ")
+	pdfWriter.current_obj.buffer.WriteString(" 0 R ")
 }
 
 // Output PDF data with a newline
-func (this *PdfWriter) out(s string) {
-	this.current_obj.buffer.WriteString(s)
-	this.current_obj.buffer.WriteString("\n")
+func (pdfWriter *PdfWriter) out(s string) {
+	pdfWriter.current_obj.buffer.WriteString(s)
+	pdfWriter.current_obj.buffer.WriteString("\n")
 }
 
 // Output PDF data
-func (this *PdfWriter) straightOut(s string) {
-	this.current_obj.buffer.WriteString(s)
+func (pdfWriter *PdfWriter) straightOut(s string) {
+	pdfWriter.current_obj.buffer.WriteString(s)
 }
 
 // Output a PdfValue
-func (this *PdfWriter) writeValue(value *PdfValue) {
+func (pdfWriter *PdfWriter) writeValue(value *PdfValue) {
 	switch value.Type {
 	case PDF_TYPE_TOKEN:
-		this.straightOut(value.Token + " ")
+		pdfWriter.straightOut(value.Token + " ")
 		break
 
 	case PDF_TYPE_NUMERIC:
-		this.straightOut(fmt.Sprintf("%d", value.Int) + " ")
+		pdfWriter.straightOut(fmt.Sprintf("%d", value.Int) + " ")
 		break
 
 	case PDF_TYPE_REAL:
-		this.straightOut(fmt.Sprintf("%F", value.Real) + " ")
+		pdfWriter.straightOut(fmt.Sprintf("%F", value.Real) + " ")
 		break
 
 	case PDF_TYPE_ARRAY:
-		this.straightOut("[")
+		pdfWriter.straightOut("[")
 		for i := 0; i < len(value.Array); i++ {
-			this.writeValue(value.Array[i])
+			pdfWriter.writeValue(value.Array[i])
 		}
-		this.out("]")
+		pdfWriter.out("]")
 		break
 
 	case PDF_TYPE_DICTIONARY:
-		this.straightOut("<<")
+		pdfWriter.straightOut("<<")
 		for k, v := range value.Dictionary {
-			this.straightOut(k + " ")
-			this.writeValue(v)
+			pdfWriter.straightOut(k + " ")
+			pdfWriter.writeValue(v)
 		}
-		this.straightOut(">>")
+		pdfWriter.straightOut(">>")
 		break
 
 	case PDF_TYPE_OBJREF:
 		// An indirect object reference.  Fill the object stack if needed.
 		// Check to see if object already exists on the don_obj_stack.
-		if _, ok := this.don_obj_stack[value.Id]; !ok {
-			this.newObj(-1, true)
-			this.obj_stack[value.Id] = &PdfValue{Type: PDF_TYPE_OBJREF, Gen: value.Gen, Id: value.Id, NewId: this.n}
-			this.don_obj_stack[value.Id] = &PdfValue{Type: PDF_TYPE_OBJREF, Gen: value.Gen, Id: value.Id, NewId: this.n}
+		if _, ok := pdfWriter.don_obj_stack[value.Id]; !ok {
+			pdfWriter.newObj(-1, true)
+			pdfWriter.obj_stack[value.Id] = &PdfValue{Type: PDF_TYPE_OBJREF, Gen: value.Gen, Id: value.Id, NewId: pdfWriter.n}
+			pdfWriter.don_obj_stack[value.Id] = &PdfValue{Type: PDF_TYPE_OBJREF, Gen: value.Gen, Id: value.Id, NewId: pdfWriter.n}
 		}
 
 		// Get object ID from don_obj_stack
-		objId := this.don_obj_stack[value.Id].NewId
-		this.outObjRef(objId)
-		//this.out(fmt.Sprintf("%d 0 R", objId))
+		objId := pdfWriter.don_obj_stack[value.Id].NewId
+		pdfWriter.outObjRef(objId)
+		//pdfWriter.out(fmt.Sprintf("%d 0 R", objId))
 		break
 
 	case PDF_TYPE_STRING:
 		// A string
-		this.straightOut("(" + value.String + ")")
+		pdfWriter.straightOut("(" + value.String + ")")
 		break
 
 	case PDF_TYPE_STREAM:
 		// A stream.  First, output the stream dictionary, then the stream data itself.
-		this.writeValue(value.Value)
-		this.out("stream")
-		this.out(string(value.Stream.Bytes))
-		this.out("endstream")
+		pdfWriter.writeValue(value.Value)
+		pdfWriter.out("stream")
+		pdfWriter.out(string(value.Stream.Bytes))
+		pdfWriter.out("endstream")
 		break
 
 	case PDF_TYPE_HEX:
-		this.straightOut("<" + value.String + ">")
+		pdfWriter.straightOut("<" + value.String + ">")
 		break
 
 	case PDF_TYPE_BOOLEAN:
 		if value.Bool {
-			this.straightOut("true ")
+			pdfWriter.straightOut("true ")
 		} else {
-			this.straightOut("false ")
+			pdfWriter.straightOut("false ")
 		}
 		break
 
 	case PDF_TYPE_NULL:
 		// The null object
-		this.straightOut("null ")
+		pdfWriter.straightOut("null ")
 		break
 	}
 }
 
 // Output Form XObjects (1 for each template)
 // returns a map of template names (e.g. /GOFPDITPL1) to PdfObjectId
-func (this *PdfWriter) PutFormXobjects(reader *PdfReader) (map[string]*PdfObjectId, error) {
+func (pdfWriter *PdfWriter) PutFormXobjects(reader *PdfReader) (map[string]*PdfObjectId, error) {
 	// Set current reader
-	this.r = reader
+	pdfWriter.r = reader
 
 	var err error
 	var result = make(map[string]*PdfObjectId, 0)
@@ -352,8 +352,8 @@ func (this *PdfWriter) PutFormXobjects(reader *PdfReader) (map[string]*PdfObject
 		filter = "/Filter /FlateDecode "
 	}
 
-	for i := 0; i < len(this.tpls); i++ {
-		tpl := this.tpls[i]
+	for i := 0; i < len(pdfWriter.tpls); i++ {
+		tpl := pdfWriter.tpls[i]
 		if tpl == nil {
 			return nil, errors.New("Template is nil")
 		}
@@ -370,23 +370,23 @@ func (this *PdfWriter) PutFormXobjects(reader *PdfReader) (map[string]*PdfObject
 		}
 
 		// Create new PDF object
-		this.newObj(-1, false)
+		pdfWriter.newObj(-1, false)
 
-		cN := this.n // remember current "n"
+		cN := pdfWriter.n // remember current "n"
 
-		tpl.N = this.n
+		tpl.N = pdfWriter.n
 
 		// Return xobject form name and object position
 		pdfObjId := new(PdfObjectId)
 		pdfObjId.id = cN
-		pdfObjId.hash = this.shaOfInt(cN)
-		result[fmt.Sprintf("/GOFPDITPL%d", i+this.tpl_id_offset)] = pdfObjId
+		pdfObjId.hash = pdfWriter.shaOfInt(cN)
+		result[fmt.Sprintf("/GOFPDITPL%d", i+pdfWriter.tpl_id_offset)] = pdfObjId
 
-		this.out("<<" + filter + "/Type /XObject")
-		this.out("/Subtype /Form")
-		this.out("/FormType 1")
+		pdfWriter.out("<<" + filter + "/Type /XObject")
+		pdfWriter.out("/Subtype /Form")
+		pdfWriter.out("/FormType 1")
 
-		this.out(fmt.Sprintf("/BBox [%.2F %.2F %.2F %.2F]", tpl.Box["llx"]*this.k, tpl.Box["lly"]*this.k, (tpl.Box["urx"]+tpl.X)*this.k, (tpl.Box["ury"]-tpl.Y)*this.k))
+		pdfWriter.out(fmt.Sprintf("/BBox [%.2F %.2F %.2F %.2F]", tpl.Box["llx"]*pdfWriter.k, tpl.Box["lly"]*pdfWriter.k, (tpl.Box["urx"]+tpl.X)*pdfWriter.k, (tpl.Box["ury"]-tpl.Y)*pdfWriter.k))
 
 		var c, s, tx, ty float64
 		c = 1
@@ -422,38 +422,38 @@ func (this *PdfWriter) PutFormXobjects(reader *PdfReader) (map[string]*PdfObject
 			ty = tpl.Box["y"] * 2
 		}
 
-		tx *= this.k
-		ty *= this.k
+		tx *= pdfWriter.k
+		ty *= pdfWriter.k
 
 		if c != 1 || s != 0 || tx != 0 || ty != 0 {
-			this.out(fmt.Sprintf("/Matrix [%.5F %.5F %.5F %.5F %.5F %.5F]", c, s, -s, c, tx, ty))
+			pdfWriter.out(fmt.Sprintf("/Matrix [%.5F %.5F %.5F %.5F %.5F %.5F]", c, s, -s, c, tx, ty))
 		}
 
 		// Now write resources
-		this.out("/Resources ")
+		pdfWriter.out("/Resources ")
 
 		if tpl.Resources != nil {
-			this.writeValue(tpl.Resources) // "n" will be changed
+			pdfWriter.writeValue(tpl.Resources) // "n" will be changed
 		} else {
 			return nil, errors.New("Template resources are empty")
 		}
 
-		nN := this.n // remember new "n"
-		this.n = cN  // reset to current "n"
+		nN := pdfWriter.n // remember new "n"
+		pdfWriter.n = cN  // reset to current "n"
 
-		this.out("/Length " + fmt.Sprintf("%d", len(p)) + " >>")
+		pdfWriter.out("/Length " + fmt.Sprintf("%d", len(p)) + " >>")
 
-		this.out("stream")
-		this.out(p)
-		this.out("endstream")
+		pdfWriter.out("stream")
+		pdfWriter.out(p)
+		pdfWriter.out("endstream")
 
-		this.endObj()
+		pdfWriter.endObj()
 
-		this.n = nN // reset to new "n"
+		pdfWriter.n = nN // reset to new "n"
 
 		// Put imported objects, starting with the ones from the XObject's Resources,
 		// then from dependencies of those resources).
-		err = this.putImportedObjects(reader)
+		err = pdfWriter.putImportedObjects(reader)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to put imported objects")
 		}
@@ -462,19 +462,19 @@ func (this *PdfWriter) PutFormXobjects(reader *PdfReader) (map[string]*PdfObject
 	return result, nil
 }
 
-func (this *PdfWriter) putImportedObjects(reader *PdfReader) error {
+func (pdfWriter *PdfWriter) putImportedObjects(reader *PdfReader) error {
 	var err error
 	var nObj *PdfValue
 
 	// obj_stack will have new items added to it in the inner loop, so do another loop to check for extras
-	// TODO make the order of this the same every time
+	// TODO make the order of pdfWriter the same every time
 	for {
 		atLeastOne := false
 
-		// FIXME:  How to determine number of objects before this loop?
+		// FIXME:  How to determine number of objects before pdfWriter loop?
 		for i := 0; i < 9999; i++ {
 			k := i
-			v := this.obj_stack[i]
+			v := pdfWriter.obj_stack[i]
 
 			if v == nil {
 				continue
@@ -488,18 +488,18 @@ func (this *PdfWriter) putImportedObjects(reader *PdfReader) error {
 			}
 
 			// New object with "NewId" field
-			this.newObj(v.NewId, false)
+			pdfWriter.newObj(v.NewId, false)
 
 			if nObj.Type == PDF_TYPE_STREAM {
-				this.writeValue(nObj)
+				pdfWriter.writeValue(nObj)
 			} else {
-				this.writeValue(nObj.Value)
+				pdfWriter.writeValue(nObj.Value)
 			}
 
-			this.endObj()
+			pdfWriter.endObj()
 
 			// Remove from stack
-			this.obj_stack[k] = nil
+			pdfWriter.obj_stack[k] = nil
 		}
 
 		if !atLeastOne {
@@ -511,11 +511,11 @@ func (this *PdfWriter) putImportedObjects(reader *PdfReader) error {
 }
 
 // Get the calculated size of a template
-// If one size is given, this method calculates the other one
-func (this *PdfWriter) getTemplateSize(tplid int, _w float64, _h float64) map[string]float64 {
+// If one size is given, pdfWriter method calculates the other one
+func (pdfWriter *PdfWriter) getTemplateSize(tplid int, _w float64, _h float64) map[string]float64 {
 	result := make(map[string]float64, 2)
 
-	tpl := this.tpls[tplid]
+	tpl := pdfWriter.tpls[tplid]
 
 	w := tpl.W
 	h := tpl.H
@@ -539,8 +539,8 @@ func (this *PdfWriter) getTemplateSize(tplid int, _w float64, _h float64) map[st
 	return result
 }
 
-func (this *PdfWriter) UseTemplate(tplid int, _x float64, _y float64, _w float64, _h float64) (string, float64, float64, float64, float64) {
-	tpl := this.tpls[tplid]
+func (pdfWriter *PdfWriter) UseTemplate(tplid int, _x float64, _y float64, _w float64, _h float64) (string, float64, float64, float64, float64) {
+	tpl := pdfWriter.tpls[tplid]
 
 	w := tpl.W
 	h := tpl.H
@@ -548,7 +548,7 @@ func (this *PdfWriter) UseTemplate(tplid int, _x float64, _y float64, _w float64
 	_x += tpl.X
 	_y += tpl.Y
 
-	wh := this.getTemplateSize(0, _w, _h)
+	wh := pdfWriter.getTemplateSize(0, _w, _h)
 
 	_w = wh["w"]
 	_h = wh["h"]
@@ -564,5 +564,5 @@ func (this *PdfWriter) UseTemplate(tplid int, _x float64, _y float64, _w float64
 	tData["ty"] = (0 - _y - _h)
 	tData["lty"] = (0 - _y - _h) - (0-h)*(_h/h)
 
-	return fmt.Sprintf("/GOFPDITPL%d", tplid+this.tpl_id_offset), tData["scaleX"], tData["scaleY"], tData["tx"] * this.k, tData["ty"] * this.k
+	return fmt.Sprintf("/GOFPDITPL%d", tplid+pdfWriter.tpl_id_offset), tData["scaleX"], tData["scaleY"], tData["tx"] * pdfWriter.k, tData["ty"] * pdfWriter.k
 }

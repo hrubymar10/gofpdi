@@ -6,12 +6,13 @@ import (
 	"compress/zlib"
 	"encoding/binary"
 	"fmt"
-	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"math"
 	"os"
 	"strconv"
+
+	"github.com/pkg/errors"
 )
 
 type PdfReader struct {
@@ -68,11 +69,11 @@ func NewPdfReader(filename string) (*PdfReader, error) {
 	return parser, nil
 }
 
-func (this *PdfReader) init() error {
-	this.availableBoxes = []string{"/MediaBox", "/CropBox", "/BleedBox", "/TrimBox", "/ArtBox"}
-	this.xref = make(map[int]map[int]int, 0)
-	this.xrefStream = make(map[int][2]int, 0)
-	err := this.read()
+func (pdfReader *PdfReader) init() error {
+	pdfReader.availableBoxes = []string{"/MediaBox", "/CropBox", "/BleedBox", "/TrimBox", "/ArtBox"}
+	pdfReader.xref = make(map[int]map[int]int, 0)
+	pdfReader.xrefStream = make(map[int][2]int, 0)
+	err := pdfReader.read()
 	if err != nil {
 		return errors.Wrap(err, "Failed to read pdf")
 	}
@@ -97,7 +98,7 @@ type PdfValue struct {
 }
 
 // Jump over comments
-func (this *PdfReader) skipComments(r *bufio.Reader) error {
+func (*PdfReader) skipComments(r *bufio.Reader) error {
 	var err error
 	var b byte
 
@@ -126,7 +127,7 @@ func (this *PdfReader) skipComments(r *bufio.Reader) error {
 }
 
 // Advance reader so that whitespace is ignored
-func (this *PdfReader) skipWhitespace(r *bufio.Reader) error {
+func (*PdfReader) skipWhitespace(r *bufio.Reader) error {
 	var err error
 	var b byte
 
@@ -151,17 +152,17 @@ func (this *PdfReader) skipWhitespace(r *bufio.Reader) error {
 }
 
 // Read a token
-func (this *PdfReader) readToken(r *bufio.Reader) (string, error) {
+func (pdfReader *PdfReader) readToken(r *bufio.Reader) (string, error) {
 	var err error
 
 	// If there is a token available on the stack, pop it out and return it.
-	if len(this.stack) > 0 {
+	if len(pdfReader.stack) > 0 {
 		var popped string
-		popped, this.stack = this.stack[len(this.stack)-1], this.stack[:len(this.stack)-1]
+		popped, pdfReader.stack = pdfReader.stack[len(pdfReader.stack)-1], pdfReader.stack[:len(pdfReader.stack)-1]
 		return popped, nil
 	}
 
-	err = this.skipWhitespace(r)
+	err = pdfReader.skipWhitespace(r)
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to skip whitespace")
 	}
@@ -176,11 +177,11 @@ func (this *PdfReader) readToken(r *bufio.Reader) (string, error) {
 
 	switch b {
 	case '[', ']', '(', ')':
-		// This is either an array or literal string delimeter, return it.
+		// pdfReader is either an array or literal string delimeter, return it.
 		return string(b), nil
 
 	case '<', '>':
-		// This could either be a hex string or a dictionary delimiter.
+		// pdfReader could either be a hex string or a dictionary delimiter.
 		// Determine the appropriate case and return the token.
 		nb, err := r.ReadByte()
 		if err != nil {
@@ -194,14 +195,14 @@ func (this *PdfReader) readToken(r *bufio.Reader) (string, error) {
 		}
 
 	case '%':
-		err = this.skipComments(r)
+		err = pdfReader.skipComments(r)
 		if err != nil {
 			return "", errors.Wrap(err, "Failed to skip comments")
 		}
-		return this.readToken(r)
+		return pdfReader.readToken(r)
 
 	default:
-		// FIXME this may not be performant to create new strings for each byte
+		// FIXME pdfReader may not be performant to create new strings for each byte
 		// Is it probably better to create a buffer and then convert to a string at the end.
 		str := string(b)
 
@@ -221,12 +222,10 @@ func (this *PdfReader) readToken(r *bufio.Reader) (string, error) {
 		}
 		return str, nil
 	}
-
-	return "", nil
 }
 
 // Read a value based on a token
-func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
+func (pdfReader *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 	var err error
 	var b byte
 
@@ -238,7 +237,7 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 
 	switch t {
 	case "<":
-		// This is a hex string
+		// pdfReader is a hex string
 
 		// Read bytes until '>' is found
 		var s string
@@ -258,11 +257,11 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 		result.String = s
 
 	case "<<":
-		// This is a dictionary
+		// pdfReader is a dictionary
 
-		// Recurse into this function until we reach the end of the dictionary.
+		// Recurse into pdfReader function until we reach the end of the dictionary.
 		for {
-			key, err := this.readToken(r)
+			key, err := pdfReader.readToken(r)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to read token")
 			}
@@ -275,12 +274,12 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 			}
 
 			// read next token
-			newKey, err := this.readToken(r)
+			newKey, err := pdfReader.readToken(r)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to read token")
 			}
 
-			value, err := this.readValue(r, newKey)
+			value, err := pdfReader.readValue(r, newKey)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to read value for token: "+newKey)
 			}
@@ -304,13 +303,13 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 		return result, nil
 
 	case "[":
-		// This is an array
+		// pdfReader is an array
 
 		tmpResult := make([]*PdfValue, 0)
 
-		// Recurse into this function until we reach the end of the array
+		// Recurse into pdfReader function until we reach the end of the array
 		for {
-			key, err := this.readToken(r)
+			key, err := pdfReader.readToken(r)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to read token")
 			}
@@ -322,7 +321,7 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 				break
 			}
 
-			value, err := this.readValue(r, key)
+			value, err := pdfReader.readValue(r, key)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to read value for token: "+key)
 			}
@@ -338,7 +337,7 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 		result.Array = tmpResult
 
 	case "(":
-		// This is a string
+		// pdfReader is a string
 
 		openBrackets := 1
 
@@ -389,17 +388,17 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 
 		if is_numeric(t) {
 			// A numeric token.  Make sure that it is not part of something else
-			t2, err := this.readToken(r)
+			t2, err := pdfReader.readToken(r)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to read token")
 			}
 			if t2 != "" {
 				if is_numeric(t2) {
 					// Two numeric tokens in a row.
-					// In this case, we're probably in front of either an object reference
+					// In pdfReader case, we're probably in front of either an object reference
 					// or an object specification.
 					// Determine the case and return the data.
-					t3, err := this.readToken(r)
+					t3, err := pdfReader.readToken(r)
 					if err != nil {
 						return nil, errors.Wrap(err, "Failed to read token")
 					}
@@ -419,13 +418,13 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 							return result, nil
 						}
 
-						// If we get to this point, that numeric value up there was just a numeric value.
+						// If we get to pdfReader point, that numeric value up there was just a numeric value.
 						// Push the extra tokens back into the stack and return the value.
-						this.stack = append(this.stack, t3)
+						pdfReader.stack = append(pdfReader.stack, t3)
 					}
 				}
 
-				this.stack = append(this.stack, t2)
+				pdfReader.stack = append(pdfReader.stack, t2)
 			}
 
 			if n, err := strconv.Atoi(t); err == nil {
@@ -451,23 +450,23 @@ func (this *PdfReader) readValue(r *bufio.Reader, t string) (*PdfValue, error) {
 }
 
 // Resolve a compressed object (PDF 1.5)
-func (this *PdfReader) resolveCompressedObject(objSpec *PdfValue) (*PdfValue, error) {
+func (pdfReader *PdfReader) resolveCompressedObject(objSpec *PdfValue) (*PdfValue, error) {
 	var err error
 
 	// Make sure object reference exists in xrefStream
-	if _, ok := this.xrefStream[objSpec.Id]; !ok {
+	if _, ok := pdfReader.xrefStream[objSpec.Id]; !ok {
 		return nil, errors.New(fmt.Sprintf("Could not find object ID %d in xref stream or xref table.", objSpec.Id))
 	}
 
 	// Get object id and index
-	objectId := this.xrefStream[objSpec.Id][0]
-	objectIndex := this.xrefStream[objSpec.Id][1]
+	objectId := pdfReader.xrefStream[objSpec.Id][0]
+	objectIndex := pdfReader.xrefStream[objSpec.Id][1]
 
 	// Read compressed object
 	compressedObjSpec := &PdfValue{Type: PDF_TYPE_OBJREF, Id: objectId, Gen: 0}
 
 	// Resolve compressed object
-	compressedObj, err := this.resolveObject(compressedObjSpec)
+	compressedObj, err := pdfReader.resolveObject(compressedObjSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to resolve compressed object")
 	}
@@ -527,7 +526,7 @@ func (this *PdfReader) resolveCompressedObject(objSpec *PdfValue) (*PdfValue, er
 		var _objpos int
 
 		// Read first token (object index)
-		token, err = this.readToken(r)
+		token, err = pdfReader.readToken(r)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to read token")
 		}
@@ -539,7 +538,7 @@ func (this *PdfReader) resolveCompressedObject(objSpec *PdfValue) (*PdfValue, er
 		}
 
 		// Read first token (object index)
-		token, err = this.readToken(r)
+		token, err = pdfReader.readToken(r)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to read token")
 		}
@@ -569,13 +568,13 @@ func (this *PdfReader) resolveCompressedObject(objSpec *PdfValue) (*PdfValue, er
 	r = bufio.NewReader(rs)
 
 	// Read token
-	token, err := this.readToken(r)
+	token, err := pdfReader.readToken(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to read token")
 	}
 
 	// Read object
-	obj, err := this.readValue(r, token)
+	obj, err := pdfReader.readValue(r, token)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to read value for token: "+token)
 	}
@@ -589,42 +588,42 @@ func (this *PdfReader) resolveCompressedObject(objSpec *PdfValue) (*PdfValue, er
 	return result, nil
 }
 
-func (this *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
+func (pdfReader *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
 	var err error
 	var old_pos int64
 
 	// Create new bufio.Reader
-	r := bufio.NewReader(this.f)
+	r := bufio.NewReader(pdfReader.f)
 
 	if objSpec.Type == PDF_TYPE_OBJREF {
-		// This is a reference, resolve it.
-		offset := this.xref[objSpec.Id][objSpec.Gen]
+		// pdfReader is a reference, resolve it.
+		offset := pdfReader.xref[objSpec.Id][objSpec.Gen]
 
-		if _, ok := this.xref[objSpec.Id]; !ok {
-			// This may be a compressed object
-			return this.resolveCompressedObject(objSpec)
+		if _, ok := pdfReader.xref[objSpec.Id]; !ok {
+			// pdfReader may be a compressed object
+			return pdfReader.resolveCompressedObject(objSpec)
 		}
 
 		// Save current file position
-		// This is needed if you want to resolve reference while you're reading another object.
+		// pdfReader is needed if you want to resolve reference while you're reading another object.
 		// (e.g.: if you need to determine the length of a stream)
-		old_pos, err = this.f.Seek(0, os.SEEK_CUR)
+		old_pos, err = pdfReader.f.Seek(0, os.SEEK_CUR)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to get current position of file")
 		}
 
 		// Reposition the file pointer and load the object header
-		_, err = this.f.Seek(int64(offset), 0)
+		_, err = pdfReader.f.Seek(int64(offset), 0)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to set position of file")
 		}
 
-		token, err := this.readToken(r)
+		token, err := pdfReader.readToken(r)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to read token")
 		}
 
-		obj, err := this.readValue(r, token)
+		obj, err := pdfReader.readValue(r, token)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to read value for token: "+token)
 		}
@@ -642,19 +641,19 @@ func (this *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
 		}
 
 		// Read next token
-		token, err = this.readToken(r)
+		token, err = pdfReader.readToken(r)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to read token")
 		}
 
 		// Read actual object value
-		value, err := this.readValue(r, token)
+		value, err := pdfReader.readValue(r, token)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to read value for token: "+token)
 		}
 
 		// Read next token
-		token, err = this.readToken(r)
+		token, err = pdfReader.readToken(r)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to read token")
 		}
@@ -668,7 +667,7 @@ func (this *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
 		if token == "stream" {
 			result.Type = PDF_TYPE_STREAM
 
-			err = this.skipWhitespace(r)
+			err = pdfReader.skipWhitespace(r)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to skip whitespace")
 			}
@@ -681,7 +680,7 @@ func (this *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
 
 			// If lengthDict is an object reference, resolve the object and set length
 			if lengthDict.Type == PDF_TYPE_OBJREF {
-				lengthDict, err = this.resolveObject(lengthDict)
+				lengthDict, err = pdfReader.resolveObject(lengthDict)
 
 				if err != nil {
 					return nil, errors.Wrap(err, "Failed to resolve length object of stream")
@@ -700,7 +699,7 @@ func (this *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
 				return nil, errors.Wrap(err, "Failed to read bytes from buffer")
 			}
 
-			token, err = this.readToken(r)
+			token, err = pdfReader.readToken(r)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to read token")
 			}
@@ -708,7 +707,7 @@ func (this *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
 				return nil, errors.New("Expected next token to be: endstream, got: " + token)
 			}
 
-			token, err = this.readToken(r)
+			token, err = pdfReader.readToken(r)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to read token")
 			}
@@ -725,7 +724,7 @@ func (this *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
 		}
 
 		// Reposition the file pointer to previous position
-		_, err = this.f.Seek(old_pos, 0)
+		_, err = pdfReader.f.Seek(old_pos, 0)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to set position of file")
 		}
@@ -735,12 +734,10 @@ func (this *PdfReader) resolveObject(objSpec *PdfValue) (*PdfValue, error) {
 	} else {
 		return objSpec, nil
 	}
-
-	return &PdfValue{}, nil
 }
 
 // Find the xref offset (should be at the end of the PDF)
-func (this *PdfReader) findXref() error {
+func (pdfReader *PdfReader) findXref() error {
 	var result int
 	var err error
 	var toRead int64
@@ -748,7 +745,7 @@ func (this *PdfReader) findXref() error {
 	toRead = 1500
 
 	// If PDF is smaller than 1500 bytes, be sure to only read the number of bytes that are in the file
-	fileSize := this.nBytes
+	fileSize := pdfReader.nBytes
 	if fileSize < toRead {
 		toRead = fileSize
 	}
@@ -759,22 +756,22 @@ func (this *PdfReader) findXref() error {
 	whence := 2
 
 	// Perform seek operation
-	_, err = this.f.Seek(-toRead, whence)
+	_, err = pdfReader.f.Seek(-toRead, whence)
 	if err != nil {
 		return errors.Wrap(err, "Failed to set position of file")
 	}
 
 	// Create new bufio.Reader
-	r := bufio.NewReader(this.f)
+	r := bufio.NewReader(pdfReader.f)
 	for {
 		// Read all tokens until "startxref" is found
-		token, err := this.readToken(r)
+		token, err := pdfReader.readToken(r)
 		if err != nil {
 			return errors.Wrap(err, "Failed to read token")
 		}
 
 		if token == "startxref" {
-			token, err = this.readToken(r)
+			token, err = pdfReader.readToken(r)
 			// Probably EOF before finding startxref
 			if err != nil {
 				return errors.Wrap(err, "Failed to find startxref token")
@@ -787,57 +784,57 @@ func (this *PdfReader) findXref() error {
 			}
 
 			// Successfully read the xref position
-			this.xrefPos = result
+			pdfReader.xrefPos = result
 			break
 		}
 	}
 
 	// Rewind file pointer
 	whence = 0
-	_, err = this.f.Seek(0, whence)
+	_, err = pdfReader.f.Seek(0, whence)
 	if err != nil {
 		return errors.Wrap(err, "Failed to set position of file")
 	}
 
-	this.xrefPos = result
+	pdfReader.xrefPos = result
 
 	return nil
 }
 
 // Read and parse the xref table
-func (this *PdfReader) readXref() error {
+func (pdfReader *PdfReader) readXref() error {
 	var err error
 
 	// Create new bufio.Reader
-	r := bufio.NewReader(this.f)
+	r := bufio.NewReader(pdfReader.f)
 
 	// Set file pointer to xref start
-	_, err = this.f.Seek(int64(this.xrefPos), 0)
+	_, err = pdfReader.f.Seek(int64(pdfReader.xrefPos), 0)
 	if err != nil {
 		return errors.Wrap(err, "Failed to set position of file")
 	}
 
 	// Xref should start with 'xref'
-	t, err := this.readToken(r)
+	t, err := pdfReader.readToken(r)
 	if err != nil {
 		return errors.Wrap(err, "Failed to read token")
 	}
 	if t != "xref" {
-		// Maybe this is an XRef stream ...
-		v, err := this.readValue(r, t)
+		// Maybe pdfReader is an XRef stream ...
+		v, err := pdfReader.readValue(r, t)
 		if err != nil {
 			return errors.Wrap(err, "Failed to read XRef stream")
 		}
 
 		if v.Type == PDF_TYPE_OBJDEC {
 			// Read next token
-			t, err = this.readToken(r)
+			t, err = pdfReader.readToken(r)
 			if err != nil {
 				return errors.Wrap(err, "Failed to read token")
 			}
 
 			// Read actual object value
-			v, err := this.readValue(r, t)
+			v, err := pdfReader.readValue(r, t)
 			if err != nil {
 				return errors.Wrap(err, "Failed to read value for token: "+t)
 			}
@@ -878,7 +875,7 @@ func (this *PdfReader) readXref() error {
 
 					index := make([]int, 2)
 
-					// If /Index is not set, this is an error
+					// If /Index is not set, pdfReader is an error
 					if _, ok := v.Dictionary["/Index"]; ok {
 						if len(v.Dictionary["/Index"].Array) < 2 {
 							return errors.Wrap(err, "Index array does not contain 2 elements")
@@ -900,7 +897,7 @@ func (this *PdfReader) readXref() error {
 					// Set root object
 					if _, ok := v.Dictionary["/Root"]; ok {
 						// Just set the whole dictionary with /Root key to keep compatibiltiy with existing code
-						this.trailer = v
+						pdfReader.trailer = v
 					} else {
 						// Don't return an error here.  The trailer could be in another XRef stream.
 						//return errors.New("Did not set root object")
@@ -908,7 +905,7 @@ func (this *PdfReader) readXref() error {
 
 					startObject := index[0]
 
-					err = this.skipWhitespace(r)
+					err = pdfReader.skipWhitespace(r)
 					if err != nil {
 						return errors.Wrap(err, "Failed to skip whitespace")
 					}
@@ -921,7 +918,7 @@ func (this *PdfReader) readXref() error {
 
 					// If lengthDict is an object reference, resolve the object and set length
 					if lengthDict.Type == PDF_TYPE_OBJREF {
-						lengthDict, err = this.resolveObject(lengthDict)
+						lengthDict, err = pdfReader.resolveObject(lengthDict)
 
 						if err != nil {
 							return errors.Wrap(err, "Failed to resolve length object of stream")
@@ -931,7 +928,7 @@ func (this *PdfReader) readXref() error {
 						length = lengthDict.Value.Int
 					}
 
-					t, err = this.readToken(r)
+					t, err = pdfReader.readToken(r)
 					if err != nil {
 						return errors.Wrap(err, "Failed to read token")
 					}
@@ -939,7 +936,7 @@ func (this *PdfReader) readXref() error {
 						return errors.New("Expected next token to be: stream, got: " + t)
 					}
 
-					err = this.skipWhitespace(r)
+					err = pdfReader.skipWhitespace(r)
 					if err != nil {
 						return errors.Wrap(err, "Failed to skip whitespace")
 					}
@@ -954,7 +951,7 @@ func (this *PdfReader) readXref() error {
 					}
 
 					// Look for endstream token
-					t, err = this.readToken(r)
+					t, err = pdfReader.readToken(r)
 					if err != nil {
 						return errors.Wrap(err, "Failed to read token")
 					}
@@ -963,7 +960,7 @@ func (this *PdfReader) readXref() error {
 					}
 
 					// Look for endobj token
-					t, err = this.readToken(r)
+					t, err = pdfReader.readToken(r)
 					if err != nil {
 						return errors.Wrap(err, "Failed to read token")
 					}
@@ -1035,10 +1032,10 @@ func (this *PdfReader) readXref() error {
 							objGen = int(objectData[firstFieldSize+middleFieldSize])
 
 							// Append map[int]int
-							this.xref[i] = make(map[int]int, 1)
+							pdfReader.xref[i] = make(map[int]int, 1)
 
 							// Set object id, generation, and position
-							this.xref[i][objGen] = objPos
+							pdfReader.xref[i][objGen] = objPos
 						} else if objectData[0] == 2 {
 							// Compressed objects
 							b := make([]byte, 4)
@@ -1048,7 +1045,7 @@ func (this *PdfReader) readXref() error {
 							objIdx := int(objectData[firstFieldSize+middleFieldSize])
 
 							// object id (i) is located in StmObj (objId) at index (objIdx)
-							this.xrefStream[i] = [2]int{objId, objIdx}
+							pdfReader.xrefStream[i] = [2]int{objId, objIdx}
 						}
 
 						i++
@@ -1057,10 +1054,10 @@ func (this *PdfReader) readXref() error {
 					// Check for previous xref stream
 					if prevXref > 0 {
 						// Set xrefPos to /Prev xref
-						this.xrefPos = prevXref
+						pdfReader.xrefPos = prevXref
 
 						// Read preivous xref
-						xrefErr := this.readXref()
+						xrefErr := pdfReader.readXref()
 						if xrefErr != nil {
 							return errors.Wrap(xrefErr, "Failed to read prev xref")
 						}
@@ -1076,7 +1073,7 @@ func (this *PdfReader) readXref() error {
 
 	for {
 		// Next value will be the starting object id (usually 0, but not always) or the trailer
-		t, err = this.readToken(r)
+		t, err = pdfReader.readToken(r)
 		if err != nil {
 			return errors.Wrap(err, "Failed to read token")
 		}
@@ -1093,7 +1090,7 @@ func (this *PdfReader) readXref() error {
 		}
 
 		// Determine how many objects there are
-		t, err = this.readToken(r)
+		t, err = pdfReader.readToken(r)
 		if err != nil {
 			return errors.Wrap(err, "Failed to read token")
 		}
@@ -1106,7 +1103,7 @@ func (this *PdfReader) readXref() error {
 
 		// For all objects in xref, read object position, object generation, and status (free or new)
 		for i := startObject; i < startObject+numObject; i++ {
-			t, err = this.readToken(r)
+			t, err = pdfReader.readToken(r)
 			if err != nil {
 				return errors.Wrap(err, "Failed to read token")
 			}
@@ -1117,7 +1114,7 @@ func (this *PdfReader) readXref() error {
 				return errors.Wrap(err, "Failed to convert object position to integer: "+t)
 			}
 
-			t, err = this.readToken(r)
+			t, err = pdfReader.readToken(r)
 			if err != nil {
 				return errors.Wrap(err, "Failed to read token")
 			}
@@ -1129,7 +1126,7 @@ func (this *PdfReader) readXref() error {
 			}
 
 			// Get object status (free or new)
-			objStatus, err := this.readToken(r)
+			objStatus, err := pdfReader.readToken(r)
 			if err != nil {
 				return errors.Wrap(err, "Failed to read token")
 			}
@@ -1138,47 +1135,47 @@ func (this *PdfReader) readXref() error {
 			}
 
 			// Append map[int]int
-			this.xref[i] = make(map[int]int, 1)
+			pdfReader.xref[i] = make(map[int]int, 1)
 
 			// Set object id, generation, and position
-			this.xref[i][objGen] = objPos
+			pdfReader.xref[i][objGen] = objPos
 		}
 	}
 
 	// Read trailer dictionary
-	t, err = this.readToken(r)
+	t, err = pdfReader.readToken(r)
 	if err != nil {
 		return errors.Wrap(err, "Failed to read token")
 	}
 
-	trailer, err := this.readValue(r, t)
+	trailer, err := pdfReader.readValue(r, t)
 	if err != nil {
 		return errors.Wrap(err, "Failed to read value for token: "+t)
 	}
 
 	// If /Root is set, then set trailer object so that /Root can be read later
 	if _, ok := trailer.Dictionary["/Root"]; ok {
-		this.trailer = trailer
+		pdfReader.trailer = trailer
 	}
 
 	// If a /Prev xref trailer is specified, parse that
 	if tr, ok := trailer.Dictionary["/Prev"]; ok {
 		// Resolve parent xref table
-		this.xrefPos = tr.Int
-		return this.readXref()
+		pdfReader.xrefPos = tr.Int
+		return pdfReader.readXref()
 	}
 
 	return nil
 }
 
 // Read root (catalog object)
-func (this *PdfReader) readRoot() error {
+func (pdfReader *PdfReader) readRoot() error {
 	var err error
 
-	rootObjSpec := this.trailer.Dictionary["/Root"]
+	rootObjSpec := pdfReader.trailer.Dictionary["/Root"]
 
 	// Read root (catalog)
-	this.catalog, err = this.resolveObject(rootObjSpec)
+	pdfReader.catalog, err = pdfReader.resolveObject(rootObjSpec)
 	if err != nil {
 		return errors.Wrap(err, "Failed to resolve root object")
 	}
@@ -1187,10 +1184,10 @@ func (this *PdfReader) readRoot() error {
 }
 
 // Read kids (pages inside a page tree)
-func (this *PdfReader) readKids(kids *PdfValue, r int) error {
+func (pdfReader *PdfReader) readKids(kids *PdfValue, r int) error {
 	// Loop through pages and add to result
 	for i := 0; i < len(kids.Array); i++ {
-		page, err := this.resolveObject(kids.Array[i])
+		page, err := pdfReader.resolveObject(kids.Array[i])
 		if err != nil {
 			return errors.Wrap(err, "Failed to resolve page/pages object")
 		}
@@ -1198,17 +1195,17 @@ func (this *PdfReader) readKids(kids *PdfValue, r int) error {
 		objType := page.Value.Dictionary["/Type"].Token
 		if objType == "/Page" {
 			// Set page and increment curPage
-			this.pages[this.curPage] = page
-			this.curPage++
+			pdfReader.pages[pdfReader.curPage] = page
+			pdfReader.curPage++
 		} else if objType == "/Pages" {
 			// Resolve kids
-			subKids, err := this.resolveObject(page.Value.Dictionary["/Kids"])
+			subKids, err := pdfReader.resolveObject(page.Value.Dictionary["/Kids"])
 			if err != nil {
 				return errors.Wrap(err, "Failed to resolve kids")
 			}
 
 			// Recurse into page tree
-			err = this.readKids(subKids, r+1)
+			err = pdfReader.readKids(subKids, r+1)
 			if err != nil {
 				return errors.Wrap(err, "Failed to read kids")
 			}
@@ -1221,33 +1218,33 @@ func (this *PdfReader) readKids(kids *PdfValue, r int) error {
 }
 
 // Read all pages in PDF
-func (this *PdfReader) readPages() error {
+func (pdfReader *PdfReader) readPages() error {
 	var err error
 
 	// resolve_pages_dict
-	pagesDict, err := this.resolveObject(this.catalog.Value.Dictionary["/Pages"])
+	pagesDict, err := pdfReader.resolveObject(pdfReader.catalog.Value.Dictionary["/Pages"])
 	if err != nil {
 		return errors.Wrap(err, "Failed to resolve pages object")
 	}
 
-	// This will normally return itself
-	kids, err := this.resolveObject(pagesDict.Value.Dictionary["/Kids"])
+	// pdfReader will normally return itself
+	kids, err := pdfReader.resolveObject(pagesDict.Value.Dictionary["/Kids"])
 	if err != nil {
 		return errors.Wrap(err, "Failed to resolve kids object")
 	}
 
 	// Get number of pages
-	pageCount, err := this.resolveObject(pagesDict.Value.Dictionary["/Count"])
+	pageCount, err := pdfReader.resolveObject(pagesDict.Value.Dictionary["/Count"])
 	if err != nil {
 		return errors.Wrap(err, "Failed to get page count")
 	}
-	this.pageCount = pageCount.Int
+	pdfReader.pageCount = pageCount.Int
 
 	// Allocate pages
-	this.pages = make([]*PdfValue, pageCount.Int)
+	pdfReader.pages = make([]*PdfValue, pageCount.Int)
 
 	// Read kids
-	err = this.readKids(kids, 0)
+	err = pdfReader.readKids(kids, 0)
 	if err != nil {
 		return errors.Wrap(err, "Failed to read kids")
 	}
@@ -1256,16 +1253,16 @@ func (this *PdfReader) readPages() error {
 }
 
 // Get references to page resources for a given page number
-func (this *PdfReader) getPageResources(pageno int) (*PdfValue, error) {
+func (pdfReader *PdfReader) getPageResources(pageno int) (*PdfValue, error) {
 	var err error
 
 	// Check to make sure page exists in pages slice
-	if len(this.pages) < pageno {
+	if len(pdfReader.pages) < pageno {
 		return nil, errors.New(fmt.Sprintf("Page %d does not exist!!", pageno))
 	}
 
 	// Resolve page object
-	page, err := this.resolveObject(this.pages[pageno-1])
+	page, err := pdfReader.resolveObject(pdfReader.pages[pageno-1])
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to resolve page object")
 	}
@@ -1273,7 +1270,7 @@ func (this *PdfReader) getPageResources(pageno int) (*PdfValue, error) {
 	// Check to see if /Resources exists in Dictionary
 	if _, ok := page.Value.Dictionary["/Resources"]; ok {
 		// Resolve /Resources object
-		res, err := this.resolveObject(page.Value.Dictionary["/Resources"])
+		res, err := pdfReader.resolveObject(page.Value.Dictionary["/Resources"])
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to resolve resources object")
 		}
@@ -1289,7 +1286,7 @@ func (this *PdfReader) getPageResources(pageno int) (*PdfValue, error) {
 		// If /Resources does not exist, check to see if /Parent exists and return that
 		if _, ok := page.Value.Dictionary["/Parent"]; ok {
 			// Resolve parent object
-			res, err := this.resolveObject(page.Value.Dictionary["/Parent"])
+			res, err := pdfReader.resolveObject(page.Value.Dictionary["/Parent"])
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to resolve parent object")
 			}
@@ -1310,7 +1307,7 @@ func (this *PdfReader) getPageResources(pageno int) (*PdfValue, error) {
 }
 
 // Get page content and return a slice of PdfValue objects
-func (this *PdfReader) getPageContent(objSpec *PdfValue) ([]*PdfValue, error) {
+func (pdfReader *PdfReader) getPageContent(objSpec *PdfValue) ([]*PdfValue, error) {
 	var err error
 	var content *PdfValue
 
@@ -1319,7 +1316,7 @@ func (this *PdfReader) getPageContent(objSpec *PdfValue) ([]*PdfValue, error) {
 
 	if objSpec.Type == PDF_TYPE_OBJREF {
 		// If objSpec is an object reference, resolve the object and append it to contents
-		content, err = this.resolveObject(objSpec)
+		content, err = pdfReader.resolveObject(objSpec)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to resolve object")
 		}
@@ -1327,7 +1324,7 @@ func (this *PdfReader) getPageContent(objSpec *PdfValue) ([]*PdfValue, error) {
 	} else if objSpec.Type == PDF_TYPE_ARRAY {
 		// If objSpec is an array, loop through the array and recursively get page content and append to contents
 		for i := 0; i < len(objSpec.Array); i++ {
-			tmpContents, err := this.getPageContent(objSpec.Array[i])
+			tmpContents, err := pdfReader.getPageContent(objSpec.Array[i])
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to get page content")
 			}
@@ -1341,25 +1338,25 @@ func (this *PdfReader) getPageContent(objSpec *PdfValue) ([]*PdfValue, error) {
 }
 
 // Get content (i.e. PDF drawing instructions)
-func (this *PdfReader) getContent(pageno int) (string, error) {
+func (pdfReader *PdfReader) getContent(pageno int) (string, error) {
 	var err error
 	var contents []*PdfValue
 
 	// Check to make sure page exists in pages slice
-	if len(this.pages) < pageno {
+	if len(pdfReader.pages) < pageno {
 		return "", errors.New(fmt.Sprintf("Page %d does not exist.", pageno))
 	}
 
 	// Get page
-	page := this.pages[pageno-1]
+	page := pdfReader.pages[pageno-1]
 
-	// FIXME: This could be slow, converting []byte to string and appending many times
+	// FIXME: pdfReader could be slow, converting []byte to string and appending many times
 	buffer := ""
 
 	// Check to make sure /Contents exists in page dictionary
 	if _, ok := page.Value.Dictionary["/Contents"]; ok {
 		// Get an array of page content
-		contents, err = this.getPageContent(page.Value.Dictionary["/Contents"])
+		contents, err = pdfReader.getPageContent(page.Value.Dictionary["/Contents"])
 		if err != nil {
 			return "", errors.Wrap(err, "Failed to get page content")
 		}
@@ -1367,12 +1364,12 @@ func (this *PdfReader) getContent(pageno int) (string, error) {
 		for i := 0; i < len(contents); i++ {
 			// Decode content if one or more /Filter is specified.
 			// Most common filter is FlateDecode which can be uncompressed with zlib
-			tmpBuffer, err := this.rebuildContentStream(contents[i])
+			tmpBuffer, err := pdfReader.rebuildContentStream(contents[i])
 			if err != nil {
 				return "", errors.Wrap(err, "Failed to rebuild content stream")
 			}
 
-			// FIXME:  This is probably slow
+			// FIXME:  pdfReader is probably slow
 			buffer += string(tmpBuffer)
 		}
 	}
@@ -1381,9 +1378,9 @@ func (this *PdfReader) getContent(pageno int) (string, error) {
 }
 
 // Rebuild content stream
-// This will decode content if one or more /Filter (such as FlateDecode) is specified.
+// pdfReader will decode content if one or more /Filter (such as FlateDecode) is specified.
 // If there are multiple filters, they will be decoded in the order in which they were specified.
-func (this *PdfReader) rebuildContentStream(content *PdfValue) ([]byte, error) {
+func (pdfReader *PdfReader) rebuildContentStream(content *PdfValue) ([]byte, error) {
 	var err error
 	var tmpFilter *PdfValue
 
@@ -1396,7 +1393,7 @@ func (this *PdfReader) rebuildContentStream(content *PdfValue) ([]byte, error) {
 
 		// If filter type is a reference, resolve it
 		if filter.Type == PDF_TYPE_OBJREF {
-			tmpFilter, err = this.resolveObject(filter)
+			tmpFilter, err = pdfReader.resolveObject(filter)
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to resolve object")
 			}
@@ -1436,22 +1433,22 @@ func (this *PdfReader) rebuildContentStream(content *PdfValue) ([]byte, error) {
 	return stream, nil
 }
 
-func (this *PdfReader) getNumPages() (int, error) {
-	if this.pageCount == 0 {
+func (pdfReader *PdfReader) getNumPages() (int, error) {
+	if pdfReader.pageCount == 0 {
 		return 0, errors.New("Page count is 0")
 	}
 
-	return this.pageCount, nil
+	return pdfReader.pageCount, nil
 }
 
-func (this *PdfReader) getAllPageBoxes(k float64) (map[int]map[string]map[string]float64, error) {
+func (pdfReader *PdfReader) getAllPageBoxes(k float64) (map[int]map[string]map[string]float64, error) {
 	var err error
 
 	// Allocate result with the number of available boxes
-	result := make(map[int]map[string]map[string]float64, len(this.pages))
+	result := make(map[int]map[string]map[string]float64, len(pdfReader.pages))
 
-	for i := 1; i <= len(this.pages); i++ {
-		result[i], err = this.getPageBoxes(i, k)
+	for i := 1; i <= len(pdfReader.pages); i++ {
+		result[i], err = pdfReader.getPageBoxes(i, k)
 		if result[i] == nil {
 			return nil, errors.Wrap(err, "Unable to get page box")
 		}
@@ -1461,38 +1458,38 @@ func (this *PdfReader) getAllPageBoxes(k float64) (map[int]map[string]map[string
 }
 
 // Get all page box data
-func (this *PdfReader) getPageBoxes(pageno int, k float64) (map[string]map[string]float64, error) {
+func (pdfReader *PdfReader) getPageBoxes(pageno int, k float64) (map[string]map[string]float64, error) {
 	var err error
 
 	// Allocate result with the number of available boxes
-	result := make(map[string]map[string]float64, len(this.availableBoxes))
+	result := make(map[string]map[string]float64, len(pdfReader.availableBoxes))
 
 	// Check to make sure page exists in pages slice
-	if len(this.pages) < pageno {
+	if len(pdfReader.pages) < pageno {
 		return nil, errors.New(fmt.Sprintf("Page %d does not exist?", pageno))
 	}
 
 	// Resolve page object
-	page, err := this.resolveObject(this.pages[pageno-1])
+	page, err := pdfReader.resolveObject(pdfReader.pages[pageno-1])
 	if err != nil {
 		return nil, errors.New("Failed to resolve page object")
 	}
 
 	// Loop through available boxes and add to result
-	for i := 0; i < len(this.availableBoxes); i++ {
-		box, err := this.getPageBox(page, this.availableBoxes[i], k)
+	for i := 0; i < len(pdfReader.availableBoxes); i++ {
+		box, err := pdfReader.getPageBox(page, pdfReader.availableBoxes[i], k)
 		if err != nil {
 			return nil, errors.New("Failed to get page box")
 		}
 
-		result[this.availableBoxes[i]] = box
+		result[pdfReader.availableBoxes[i]] = box
 	}
 
 	return result, nil
 }
 
 // Get a specific page box value (e.g. MediaBox) and return its values
-func (this *PdfReader) getPageBox(page *PdfValue, box_index string, k float64) (map[string]float64, error) {
+func (pdfReader *PdfReader) getPageBox(page *PdfValue, box_index string, k float64) (map[string]float64, error) {
 	var err error
 	var tmpBox *PdfValue
 
@@ -1505,7 +1502,7 @@ func (this *PdfReader) getPageBox(page *PdfValue, box_index string, k float64) (
 
 		// If the box type is a reference, resolve it
 		if box.Type == PDF_TYPE_OBJREF {
-			tmpBox, err = this.resolveObject(box)
+			tmpBox, err = pdfReader.resolveObject(box)
 			if err != nil {
 				return nil, errors.New("Failed to resolve object")
 			}
@@ -1527,41 +1524,41 @@ func (this *PdfReader) getPageBox(page *PdfValue, box_index string, k float64) (
 			return nil, errors.New("Could not get page box")
 		}
 	} else if _, ok := page.Value.Dictionary["/Parent"]; ok {
-		parentObj, err := this.resolveObject(page.Value.Dictionary["/Parent"])
+		parentObj, err := pdfReader.resolveObject(page.Value.Dictionary["/Parent"])
 		if err != nil {
 			return nil, errors.Wrap(err, "Could not resolve parent object")
 		}
 
 		// If the page box is inherited from /Parent, recursively return page box of parent
-		return this.getPageBox(parentObj, box_index, k)
+		return pdfReader.getPageBox(parentObj, box_index, k)
 	}
 
 	return result, nil
 }
 
 // Get page rotation for a page number
-func (this *PdfReader) getPageRotation(pageno int) (*PdfValue, error) {
+func (pdfReader *PdfReader) getPageRotation(pageno int) (*PdfValue, error) {
 	// Check to make sure page exists in pages slice
-	if len(this.pages) < pageno {
+	if len(pdfReader.pages) < pageno {
 		return nil, errors.New(fmt.Sprintf("Page %d does not exist!!!!", pageno))
 	}
 
-	return this._getPageRotation(this.pages[pageno-1])
+	return pdfReader._getPageRotation(pdfReader.pages[pageno-1])
 }
 
 // Get page rotation for a page object spec
-func (this *PdfReader) _getPageRotation(page *PdfValue) (*PdfValue, error) {
+func (pdfReader *PdfReader) _getPageRotation(page *PdfValue) (*PdfValue, error) {
 	var err error
 
 	// Resolve page object
-	page, err = this.resolveObject(page)
+	page, err = pdfReader.resolveObject(page)
 	if err != nil {
 		return nil, errors.New("Failed to resolve page object")
 	}
 
 	// Check to make sure /Rotate exists in page dictionary
 	if _, ok := page.Value.Dictionary["/Rotate"]; ok {
-		res, err := this.resolveObject(page.Value.Dictionary["/Rotate"])
+		res, err := pdfReader.resolveObject(page.Value.Dictionary["/Rotate"])
 		if err != nil {
 			return nil, errors.New("Failed to resolve rotate object")
 		}
@@ -1577,7 +1574,7 @@ func (this *PdfReader) _getPageRotation(page *PdfValue) (*PdfValue, error) {
 		// Check to see if parent has a rotation
 		if _, ok := page.Value.Dictionary["/Parent"]; ok {
 			// Recursively return /Parent page rotation
-			res, err := this._getPageRotation(page.Value.Dictionary["/Parent"])
+			res, err := pdfReader._getPageRotation(page.Value.Dictionary["/Parent"])
 			if err != nil {
 				return nil, errors.Wrap(err, "Failed to get page rotation for parent")
 			}
@@ -1595,37 +1592,37 @@ func (this *PdfReader) _getPageRotation(page *PdfValue) (*PdfValue, error) {
 	return &PdfValue{Int: 0}, nil
 }
 
-func (this *PdfReader) read() error {
+func (pdfReader *PdfReader) read() error {
 	// Only run once
-	if !this.alreadyRead {
+	if !pdfReader.alreadyRead {
 		var err error
 
 		// Find xref position
-		err = this.findXref()
+		err = pdfReader.findXref()
 		if err != nil {
 			return errors.Wrap(err, "Failed to find xref position")
 		}
 
 		// Parse xref table
-		err = this.readXref()
+		err = pdfReader.readXref()
 		if err != nil {
 			return errors.Wrap(err, "Failed to read xref table")
 		}
 
 		// Read catalog
-		err = this.readRoot()
+		err = pdfReader.readRoot()
 		if err != nil {
 			return errors.Wrap(err, "Failed to read root")
 		}
 
 		// Read pages
-		err = this.readPages()
+		err = pdfReader.readPages()
 		if err != nil {
 			return errors.Wrap(err, "Failed to to read pages")
 		}
 
-		// Now that this has been read, do not read again
-		this.alreadyRead = true
+		// Now that pdfReader has been read, do not read again
+		pdfReader.alreadyRead = true
 	}
 
 	return nil

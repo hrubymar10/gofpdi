@@ -7,12 +7,11 @@ import (
 // Determine if a value is numeric
 // Courtesy of https://github.com/syyongx/php2go/blob/master/php.go
 func is_numeric(val interface{}) bool {
-	switch val.(type) {
+	switch str := val.(type) {
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 	case float32, float64, complex64, complex128:
 		return true
 	case string:
-		str := val.(string)
 		if str == "" {
 			return false
 		}
